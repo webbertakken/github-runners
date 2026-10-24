@@ -1,4 +1,22 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>webbertakken/.github:renovate-config"]
+  "extends": ["local>webbertakken/.github:renovate-config"],
+  "customManagers": [
+    {
+      "description": "Action lists the image and the template cache: owner/repo@full-commit # vX.Y.Z",
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)actions\\.txt$/"],
+      "matchStrings": ["(?<depName>[\\w.-]+/[\\w.-]+)@(?<currentDigest>[a-f0-9]{40}) # (?<currentValue>v\\S+)"],
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "description": "Tool versions in the Dockerfile, each annotated with where its releases come from. A version with a SHA256 beside it fails the image build until the checksum follows; the Renovate flow's session updates it.",
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+ARG \\w+_VERSION=(?<currentValue>\\S+)"
+      ],
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    }
+  ]
 }
