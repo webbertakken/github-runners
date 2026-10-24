@@ -1,0 +1,6 @@
+*
+!Dockerfile
+!entrypoint.sh
+!actions.txt
+!action-archives.sh
+!keep-action-archives.sh

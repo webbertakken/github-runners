@@ -1,0 +1,74 @@
+# Self-hosted runners for one repository, from ghcr.io/webbertakken/github-runner. Copy this file,
+# runner.env.example and actions.txt into one folder on the host, replace every OWNER/REPO and the
+# paths, then follow README.md, "Use it in a repository".
+name: OWNER-REPO-runners
+
+# What every runner shares. Each service below adds its name, labels, state, cache and limits, so
+# two runners never write the same host path.
+x-runner: &runner
+  image: ghcr.io/webbertakken/github-runner:latest
+  # `docker compose up -d` pulls the newest image first; a restart alone never changes it. Pin a
+  # `:<commit>` tag instead of `latest` to hold or roll back a version.
+  pull_policy: always
+  restart: unless-stopped
+  # Reaps the zombies a job's browsers and servers leave behind.
+  init: true
+  tmpfs:
+    - /tmp:exec,mode=1777,size=2g
+  # Chromium's shared memory; Docker's default 64 MB starves it.
+  shm_size: 2gb
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 524288
+  pids_limit: 8192
+  stop_grace_period: 30s
+  logging:
+    driver: json-file
+    options:
+      max-size: 50m
+      max-file: "3"
+
+x-environment: &environment
+  RUNNER_REPOSITORY_URL: https://github.com/OWNER/REPO
+
+services:
+  runner-1:
+    <<: *runner
+    container_name: OWNER-REPO-runner-1
+    # Only for the first registration: RUNNER_TOKEN=... (runner.env.example). Delete it after.
+    env_file:
+      - path: ./runner-1.env
+        required: false
+    environment:
+      <<: *environment
+      RUNNER_NAME: OWNER-REPO-runner-1
+      # Beside self-hosted,linux,x64. Workflows pick runners by label, so runners that must never
+      # wait on each other (a deploy behind a suite) get labels of their own.
+      RUNNER_LABELS: e2e
+    volumes:
+      # The registration: the runner restarts without a token. Owned by uid 1001.
+      - /srv/OWNER-REPO-runner-1/state:/runner-state
+      # Every download a job makes, kept between jobs. Owned by uid 1001; safe to delete.
+      - /srv/OWNER-REPO-runner-1/cache:/cache
+      # The repository's own action pins, cached at each start (README.md, "Action archives").
+      - ./actions.txt:/etc/github-runner/actions.txt:ro
+    cpuset: "1-4"
+    mem_limit: 8g
+
+  runner-2:
+    <<: *runner
+    container_name: OWNER-REPO-runner-2
+    env_file:
+      - path: ./runner-2.env
+        required: false
+    environment:
+      <<: *environment
+      RUNNER_NAME: OWNER-REPO-runner-2
+      RUNNER_LABELS: deploy
+    volumes:
+      - /srv/OWNER-REPO-runner-2/state:/runner-state
+      - /srv/OWNER-REPO-runner-2/cache:/cache
+      - ./actions.txt:/etc/github-runner/actions.txt:ro
+    cpuset: "5-7"
+    mem_limit: 6g

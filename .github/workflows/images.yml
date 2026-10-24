@@ -1,0 +1,91 @@
+# Builds image/Dockerfile and publishes its final stage, e2e, as ghcr.io/webbertakken/github-runner,
+# tagged with the commit and `latest`. Pull requests build without publishing. The weekly run
+# rebuilds without the layer cache, so the image takes Ubuntu's security updates.
+name: images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "image/**"
+      - ".github/workflows/images.yml"
+  pull_request:
+    paths:
+      - "image/**"
+      - ".github/workflows/images.yml"
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch: {}
+
+# Publishes land in order: a running publish finishes and only the newest waiting one follows, so an
+# older build never becomes `latest` last. A pull request's newer push replaces its running build.
+concurrency:
+  group: images-${{ github.event_name == 'pull_request' && github.ref || 'publish' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/webbertakken/github-runner
+
+jobs:
+  image:
+    name: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Buildx, for the provenance attestation and the layer cache.
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The build context is image/ alone, narrowed further by its .dockerignore; it holds no secret.
+      # The run's token reaches only the step that downloads the action archives, as a BuildKit
+      # secret: mounted for that step, in no layer and no cache.
+      - name: Build, and publish from main
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: image
+          target: e2e
+          push: ${{ github.event_name != 'pull_request' }}
+          provenance: true
+          no-cache: ${{ github.event_name == 'schedule' }}
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=github-runner
+            org.opencontainers.image.description=A self-hosted GitHub Actions runner in a container, with browser and emulator test tools
+            org.opencontainers.image.licenses=MIT
+          secrets: |
+            github_token=${{ secrets.GITHUB_TOKEN }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Runners pull without a login: a package that is not public fails here, not on a server.
+      - name: Check the image is public
+        if: github.event_name != 'pull_request'
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/anonymous-docker
+        run: |
+          set -euo pipefail
+          mkdir -p "$DOCKER_CONFIG"
+          if ! docker buildx imagetools inspect "$IMAGE:$GITHUB_SHA" > /dev/null; then
+            echo "::error::$IMAGE:$GITHUB_SHA does not pull anonymously; make the package public: https://github.com/users/webbertakken/packages/container/github-runner/settings (Danger Zone, Change visibility)"
+            exit 1
+          fi
+          echo "$IMAGE:$GITHUB_SHA pulls anonymously"

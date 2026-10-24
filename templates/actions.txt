@@ -1,0 +1,3 @@
+# The actions this repository's workflows pin, owner/repo@full-commit, one per line; a trailing
+# comment is allowed. Each runner caches their archives at start, so "Set up job" downloads none.
+actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
