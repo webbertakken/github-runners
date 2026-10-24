@@ -40,7 +40,7 @@ RUN mkdir -p /runner-state /cache && chown 1001:1001 /runner-state /cache && chm
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/github-runner-entrypoint
 COPY --chmod=755 action-archives.sh /usr/local/bin/github-runner-action-archives
-COPY --chmod=755 keep-action-archives.sh /usr/local/bin/github-runner-keep-action-archives
+COPY --chmod=755 keep-action-archives.sh /usr/local/bin/github-runner-keep-action-archives.sh
 
 # The archives of the generic actions most workflows pin (actions.txt), so "Set up job" downloads none
 # from codeload.github.com, which answers a busy address HTTP 429. A repository's own actions come
@@ -68,9 +68,16 @@ ENV MISE_DATA_DIR=/cache/mise \
     YARN_CACHE_FOLDER=/cache/yarn \
     YARN_GLOBAL_FOLDER=/cache/yarn-global \
     ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE=/cache/action-archives \
-    ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/local/bin/github-runner-keep-action-archives \
+    ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/local/bin/github-runner-keep-action-archives.sh \
     ACTION_ARCHIVES=/etc/github-runner/actions.txt \
     RUNNER_STATE=/runner-state
+
+# The runner runs a job hook only by its extension (.sh, .ps1 or .js); any other name fails
+# "Complete runner" and with it every job. Refuse such an image here, before it is published.
+RUN case "$ACTIONS_RUNNER_HOOK_JOB_COMPLETED" in \
+      *.sh | *.ps1 | *.js) test -x "$ACTIONS_RUNNER_HOOK_JOB_COMPLETED" ;; \
+      *) echo "job hook $ACTIONS_RUNNER_HOOK_JOB_COMPLETED needs a .sh, .ps1 or .js name" >&2; exit 1 ;; \
+    esac
 
 USER 1001
 WORKDIR /home/runner
