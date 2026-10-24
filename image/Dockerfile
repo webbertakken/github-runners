@@ -11,6 +11,7 @@
 
 FROM ghcr.io/actions/actions-runner:2.338.1@sha256:e275409999c37162649aa050ca573f03eab2eabcb3a1e7fcc47548de6b4f9690 AS base
 
+# renovate: datasource=github-releases depName=cli/cli
 ARG GH_VERSION=2.103.2
 ARG GH_SHA256=62ccf747115ddc61237efffdde66a3c8f70ba249433dc64f70801089b59c59c8
 
@@ -88,10 +89,13 @@ FROM base AS e2e
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 # Only to install Chromium's system libraries at build time (`playwright install-deps`); removed after.
+# renovate: datasource=node-version depName=node
 ARG BUILD_NODE_VERSION=26.12.1
 ARG BUILD_NODE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
 # A newer Playwright that needs other system libraries means a new image with this raised.
+# renovate: datasource=npm depName=playwright
 ARG PLAYWRIGHT_VERSION=1.64.1
+# renovate: datasource=github-releases depName=firebase/firebase-tools
 ARG FIREBASE_TOOLS_VERSION=15.34.1
 ARG FIREBASE_TOOLS_SHA256=39150511323536d08fa8604c232db10da2b2421ce2c36f3913d5650a6fbe6e58
 
